@@ -8,6 +8,7 @@ function createTransactionRouter({ tokenService, transactionController }) {
   router.use(authenticate(tokenService));
   router.get('/', validate({ query: paginationQuery }), transactionController.listMine);
   router.get('/:id', validate({ params: uuidParams }), transactionController.getById);
+  router.get('/:id/receipt', validate({ params: uuidParams }), transactionController.downloadReceipt);
   return router;
 }
 

@@ -7,6 +7,7 @@ const { createTokenService } = require('./lib/token');
 const { createSocketServer } = require('./sockets');
 const { createSocketNotifier } = require('./services/notification.service');
 const { createReceiptQueue } = require('./queues/receipt.queue');
+const { createReceiptStorage } = require('./storage/receipt.storage');
 const { createContainer } = require('./container');
 const { createApp } = require('./app');
 
@@ -30,6 +31,7 @@ async function start() {
     tokenService,
     notifier: createSocketNotifier(io),
     receiptQueue,
+    storage: createReceiptStorage(config.minio, { urlExpirySeconds: config.receipt.urlExpirySeconds }),
   });
   server.on('request', createApp(container));
 

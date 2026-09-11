@@ -11,6 +11,11 @@ function createTransactionController({ transactionService }) {
     async getById(req, res) {
       res.json(await transactionService.getById(req.validated.params.id, req.user));
     },
+
+    async downloadReceipt(req, res) {
+      const url = await transactionService.getReceiptDownloadUrl(req.validated.params.id, req.user);
+      res.redirect(302, url);
+    },
   };
 }
 
