@@ -13,7 +13,8 @@
     "migrate": "node src/scripts/migrate.js",
     "dev": "node --watch src/server.js",
     "dev:worker": "node --watch src/worker.js",
-    "test": "jest",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:coverage": "jest --runInBand --coverage",
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --selectProjects integration --runInBand",
     "lint": "eslint ."
