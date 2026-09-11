@@ -5,9 +5,11 @@ const { createWalletRouter } = require('./wallet.routes');
 const { createTransferRouter } = require('./transfer.routes');
 const { createTransactionRouter } = require('./transaction.routes');
 const { createAdminRouter } = require('./admin.routes');
+const { createDocsRouter } = require('./docs.routes');
 
 function createRouter(container) {
   const router = Router();
+  router.use(createDocsRouter());
   router.use('/health', createHealthRouter(container));
   router.use('/api/auth', createAuthRouter(container));
   router.use('/api/wallets', createWalletRouter(container));

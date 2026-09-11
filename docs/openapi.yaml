@@ -1,0 +1,359 @@
+openapi: 3.0.3
+info:
+  title: Digital Wallet API
+  version: 1.0.0
+  description: |
+    Money transfer API built on Express and raw PostgreSQL.
+
+    * Transfers run inside the `transfer_funds` stored procedure (row-level locks, no race conditions).
+    * Every balance change is recorded in `transaction_ledger` by a PostgreSQL trigger.
+    * Transfers above the receipt threshold (default 5,000,000 Toman) enqueue a BullMQ job; a separate
+      worker generates a receipt and uploads it to MinIO.
+    * Recipients receive a `transfer:received` Socket.io event (see below).
+
+    All amounts are integers in **Toman**.
+
+    ### Real-time notifications (Socket.io)
+    Connect with `io(API_URL, { auth: { token: '<JWT>' } })`.
+
+    | Event | Direction | Payload |
+    |---|---|---|
+    | `session:ready` | server → client | `{ userId, expiresAt }` |
+    | `transfer:received` | server → client | `{ transactionId, amount, description, sender: { id, username, fullName }, createdAt }` |
+    | `session:expired` | server → client | `{ message }` — the socket is then disconnected |
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Auth
+  - name: Wallet
+  - name: Transfers
+  - name: Transactions
+  - name: Admin
+  - name: Health
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    TransactionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: INSUFFICIENT_FUNDS }
+            message: { type: string, example: Insufficient funds }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  location: { type: string }
+                  path: { type: string }
+                  message: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 2 }
+        username: { type: string, example: ali }
+        fullName: { type: string, example: Ali Ahmadi }
+        role: { type: string, enum: [USER, ADMIN] }
+        createdAt: { type: string, format: date-time }
+    Wallet:
+      type: object
+      properties:
+        id: { type: integer, example: 2 }
+        userId: { type: integer, example: 2 }
+        balance: { type: integer, example: 14000000 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Party:
+      type: object
+      properties:
+        userId: { type: integer }
+        username: { type: string }
+        fullName: { type: string }
+    Transaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amount: { type: integer, example: 6000000 }
+        description: { type: string, nullable: true }
+        receiptStatus: { type: string, enum: [NOT_REQUIRED, PENDING, GENERATED, FAILED] }
+        receiptUrl: { type: string, nullable: true, description: Presigned MinIO download link stored by the worker }
+        receiptObjectKey: { type: string, nullable: true, example: receipts/5f0c7a4e-8d1f-4f5b-9a55-0a3c7d2b9e11.txt }
+        createdAt: { type: string, format: date-time }
+        from: { $ref: '#/components/schemas/Party' }
+        to: { $ref: '#/components/schemas/Party' }
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        transactionId: { type: string, format: uuid, nullable: true }
+        entryType: { type: string, enum: [OPENING, DEBIT, CREDIT] }
+        amount: { type: integer }
+        balanceBefore: { type: integer }
+        balanceAfter: { type: integer }
+        createdAt: { type: string, format: date-time }
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+    TransactionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Transaction' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+    LedgerPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LedgerEntry' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing, invalid or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated user lacks the required role
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness and dependency check
+      responses:
+        '200':
+          description: All dependencies are up
+        '503':
+          description: A dependency is down
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user and create a wallet with the initial balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, fullName]
+              properties:
+                username: { type: string, pattern: '^[a-z0-9_]{3,50}$', example: reza }
+                password: { type: string, minLength: 8, maxLength: 72, example: Password@123 }
+                fullName: { type: string, maxLength: 100, example: Reza Karimi }
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  wallet:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      balance: { type: integer }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: Username already taken
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Obtain a JWT access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: ali }
+                password: { type: string, example: Password@123 }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  tokenType: { type: string, example: Bearer }
+                  expiresIn: { type: string, example: 1h }
+                  user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/wallets/me:
+    get:
+      tags: [Wallet]
+      summary: Current user's wallet balance
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Wallet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Wallet' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/wallets/me/ledger:
+    get:
+      tags: [Wallet]
+      summary: Current user's ledger entries (written by the PostgreSQL trigger)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ledger page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LedgerPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/transfers:
+    post:
+      tags: [Transfers]
+      summary: Transfer funds from the authenticated user to another user
+      description: |
+        The sender is always the authenticated user. Transfers with an amount above the receipt threshold
+        return `receiptStatus: PENDING`; the receipt link appears once the worker finishes.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toUserId, amount]
+              properties:
+                toUserId: { type: integer, example: 3 }
+                amount: { type: integer, minimum: 1, example: 6000000 }
+                description: { type: string, maxLength: 255, example: Rent }
+      responses:
+        '201':
+          description: Transfer completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '400':
+          description: Validation error, invalid amount or self transfer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Recipient not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Insufficient funds
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/transactions:
+    get:
+      tags: [Transactions]
+      summary: Transactions the authenticated user sent or received
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transaction page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/transactions/{id}:
+    get:
+      tags: [Transactions]
+      summary: A single transaction (participants and admins only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '200':
+          description: Transaction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/transactions/{id}/receipt:
+    get:
+      tags: [Transactions]
+      summary: Redirect to a fresh presigned MinIO download link for the receipt
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '302':
+          description: Redirect to the receipt file
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Receipt is still pending or failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/admin/transactions:
+    get:
+      tags: [Admin]
+      summary: All transactions in the system (ADMIN only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transaction page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
