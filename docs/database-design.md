@@ -165,14 +165,15 @@ CALL transfer_funds(p_from_user_id, p_to_user_id, p_amount, p_description, p_thr
 Isolation level: `READ COMMITTED` + row-level `FOR UPDATE` locks is sufficient; concurrent transfers
 touching the same wallet are serialised on the lock.
 
-### Trigger — `trg_wallet_balance_ledger`
+### Triggers — `trg_wallet_opening_ledger` / `trg_wallet_balance_ledger`
 
-`AFTER INSERT OR UPDATE OF balance ON wallets FOR EACH ROW`
+Both call `fn_wallet_balance_ledger()`:
 
-- **UPDATE** (`WHEN OLD.balance IS DISTINCT FROM NEW.balance`): inserts a `DEBIT` or `CREDIT` row with
-  `balance_before = OLD.balance`, `balance_after = NEW.balance`, and
-  `transaction_id = current_setting('app.current_transaction_id', true)::uuid`.
-- **INSERT** with `balance > 0`: inserts an `OPENING` row (initial balance).
+- `AFTER INSERT ON wallets` — when `balance > 0`, inserts an `OPENING` row (initial balance).
+- `AFTER UPDATE OF balance ON wallets WHEN (OLD.balance IS DISTINCT FROM NEW.balance)` — inserts a
+  `DEBIT` or `CREDIT` row with `balance_before = OLD.balance`, `balance_after = NEW.balance`, and
+  `transaction_id = current_setting('app.current_transaction_id', true)::uuid`. If no transaction id is
+  set, the balance was changed outside `transfer_funds` and the trigger raises `WL006`.
 
 ### Trigger — `trg_ledger_append_only`
 
