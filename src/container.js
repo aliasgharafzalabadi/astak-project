@@ -20,6 +20,7 @@ function createContainer({
   logger = defaultLogger,
   tokenService = createTokenService(config.jwt),
   notifier = noopNotifier,
+  receiptQueue,
 }) {
   const userRepository = createUserRepository(pool);
   const walletRepository = createWalletRepository(pool);
@@ -35,6 +36,7 @@ function createContainer({
   const walletService = createWalletService({ walletRepository });
   const transferService = createTransferService({
     transactionRepository,
+    receiptQueue,
     notifier,
     logger,
     receiptThreshold: config.receipt.threshold,

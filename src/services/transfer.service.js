@@ -1,7 +1,7 @@
-function createTransferService({ transactionRepository, notifier, logger, receiptThreshold }) {
+function createTransferService({ transactionRepository, receiptQueue, notifier, logger, receiptThreshold }) {
   return {
     async transfer({ fromUserId, toUserId, amount, description }) {
-      const { transactionId } = await transactionRepository.transfer({
+      const { transactionId, receiptStatus } = await transactionRepository.transfer({
         fromUserId,
         toUserId,
         amount,
@@ -10,6 +10,14 @@ function createTransferService({ transactionRepository, notifier, logger, receip
       });
 
       const transaction = await transactionRepository.findById(transactionId);
+
+      if (receiptStatus === 'PENDING') {
+        try {
+          await receiptQueue.enqueue(transactionId);
+        } catch (err) {
+          logger.error({ err, transactionId }, 'Failed to enqueue receipt job, it will be recovered by the worker');
+        }
+      }
 
       try {
         notifier.notifyTransferReceived(transaction);

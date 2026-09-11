@@ -6,6 +6,7 @@ const { createRedisConnection } = require('./lib/redis');
 const { createTokenService } = require('./lib/token');
 const { createSocketServer } = require('./sockets');
 const { createSocketNotifier } = require('./services/notification.service');
+const { createReceiptQueue } = require('./queues/receipt.queue');
 const { createContainer } = require('./container');
 const { createApp } = require('./app');
 
@@ -13,6 +14,11 @@ async function start() {
   const pool = createPool();
   const redis = createRedisConnection(config.redis.url);
   const tokenService = createTokenService(config.jwt);
+  const receiptQueue = createReceiptQueue({
+    connection: redis,
+    attempts: config.receipt.jobAttempts,
+    backoffMs: config.receipt.jobBackoffMs,
+  });
 
   const server = http.createServer();
   const io = createSocketServer(server, { tokenService, redis, logger });
@@ -23,6 +29,7 @@ async function start() {
     logger,
     tokenService,
     notifier: createSocketNotifier(io),
+    receiptQueue,
   });
   server.on('request', createApp(container));
 
@@ -36,6 +43,7 @@ async function start() {
     shuttingDown = true;
     logger.info({ signal }, 'Shutting down HTTP server');
     await new Promise((resolve) => io.close(() => resolve()));
+    await receiptQueue.close();
     await pool.end();
     redis.disconnect();
     process.exit(0);
