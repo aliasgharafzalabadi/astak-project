@@ -1,4 +1,4 @@
-function createTransferService({ transactionRepository, receiptThreshold }) {
+function createTransferService({ transactionRepository, notifier, logger, receiptThreshold }) {
   return {
     async transfer({ fromUserId, toUserId, amount, description }) {
       const { transactionId } = await transactionRepository.transfer({
@@ -9,7 +9,15 @@ function createTransferService({ transactionRepository, receiptThreshold }) {
         receiptThreshold,
       });
 
-      return transactionRepository.findById(transactionId);
+      const transaction = await transactionRepository.findById(transactionId);
+
+      try {
+        notifier.notifyTransferReceived(transaction);
+      } catch (err) {
+        logger.error({ err, transactionId }, 'Failed to send transfer notification');
+      }
+
+      return transaction;
     },
   };
 }

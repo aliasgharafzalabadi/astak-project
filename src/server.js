@@ -2,13 +2,29 @@ const http = require('node:http');
 const config = require('./config');
 const logger = require('./lib/logger');
 const { createPool } = require('./db/pool');
+const { createRedisConnection } = require('./lib/redis');
+const { createTokenService } = require('./lib/token');
+const { createSocketServer } = require('./sockets');
+const { createSocketNotifier } = require('./services/notification.service');
 const { createContainer } = require('./container');
 const { createApp } = require('./app');
 
 async function start() {
   const pool = createPool();
-  const container = createContainer({ pool, logger });
-  const server = http.createServer(createApp(container));
+  const redis = createRedisConnection(config.redis.url);
+  const tokenService = createTokenService(config.jwt);
+
+  const server = http.createServer();
+  const io = createSocketServer(server, { tokenService, redis, logger });
+
+  const container = createContainer({
+    pool,
+    redis,
+    logger,
+    tokenService,
+    notifier: createSocketNotifier(io),
+  });
+  server.on('request', createApp(container));
 
   server.listen(config.port, () => {
     logger.info({ port: config.port }, 'HTTP server listening');
@@ -19,8 +35,9 @@ async function start() {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'Shutting down HTTP server');
-    server.close();
+    await new Promise((resolve) => io.close(() => resolve()));
     await pool.end();
+    redis.disconnect();
     process.exit(0);
   };
 

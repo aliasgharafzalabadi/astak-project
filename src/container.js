@@ -12,12 +12,14 @@ const { createAuthController } = require('./controllers/auth.controller');
 const { createWalletController } = require('./controllers/wallet.controller');
 const { createTransferController } = require('./controllers/transfer.controller');
 const { createTransactionController } = require('./controllers/transaction.controller');
+const { noopNotifier } = require('./services/notification.service');
 
 function createContainer({
   pool,
   redis = null,
   logger = defaultLogger,
   tokenService = createTokenService(config.jwt),
+  notifier = noopNotifier,
 }) {
   const userRepository = createUserRepository(pool);
   const walletRepository = createWalletRepository(pool);
@@ -33,6 +35,8 @@ function createContainer({
   const walletService = createWalletService({ walletRepository });
   const transferService = createTransferService({
     transactionRepository,
+    notifier,
+    logger,
     receiptThreshold: config.receipt.threshold,
   });
   const transactionService = createTransactionService({ transactionRepository });
