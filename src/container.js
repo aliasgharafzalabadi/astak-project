@@ -7,9 +7,11 @@ const { createTransactionRepository } = require('./repositories/transaction.repo
 const { createAuthService } = require('./services/auth.service');
 const { createWalletService } = require('./services/wallet.service');
 const { createTransferService } = require('./services/transfer.service');
+const { createTransactionService } = require('./services/transaction.service');
 const { createAuthController } = require('./controllers/auth.controller');
 const { createWalletController } = require('./controllers/wallet.controller');
 const { createTransferController } = require('./controllers/transfer.controller');
+const { createTransactionController } = require('./controllers/transaction.controller');
 
 function createContainer({
   pool,
@@ -33,6 +35,7 @@ function createContainer({
     transactionRepository,
     receiptThreshold: config.receipt.threshold,
   });
+  const transactionService = createTransactionService({ transactionRepository });
 
   return {
     config,
@@ -43,6 +46,7 @@ function createContainer({
     authController: createAuthController({ authService }),
     walletController: createWalletController({ walletService }),
     transferController: createTransferController({ transferService }),
+    transactionController: createTransactionController({ transactionService }),
   };
 }
 
