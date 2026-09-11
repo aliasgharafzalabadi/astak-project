@@ -1,0 +1,47 @@
+x-dev-build: &dev-build
+  target: development
+
+x-dev-environment: &dev-environment
+  NODE_ENV: development
+  LOG_LEVEL: debug
+
+x-dev-volumes: &dev-volumes
+  - ./src:/app/src
+  - ./db:/app/db
+  - ./docs:/app/docs
+  - ./tests:/app/tests
+
+services:
+  migrate:
+    build: *dev-build
+    environment: *dev-environment
+    volumes: *dev-volumes
+
+  app:
+    build: *dev-build
+    command: ["npx", "nodemon", "--legacy-watch", "--watch", "src", "--watch", "docs", "--exec", "node --inspect=0.0.0.0:9229 src/server.js"]
+    environment: *dev-environment
+    volumes: *dev-volumes
+    ports:
+      - "${APP_DEBUG_HOST_PORT:-9229}:9229"
+
+  worker:
+    build: *dev-build
+    command: ["npx", "nodemon", "--legacy-watch", "--watch", "src", "--exec", "node --inspect=0.0.0.0:9230 src/worker.js"]
+    environment: *dev-environment
+    volumes: *dev-volumes
+    ports:
+      - "${WORKER_DEBUG_HOST_PORT:-9230}:9230"
+
+  frontend:
+    build:
+      target: development
+    environment:
+      VITE_API_TARGET: http://app:3000
+      VITE_USE_POLLING: "true"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+    ports: !override
+      - "${FRONTEND_DEV_HOST_PORT:-5173}:5173"

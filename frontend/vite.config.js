@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
+      watch: env.VITE_USE_POLLING === 'true' ? { usePolling: true, interval: 300 } : undefined,
       proxy: {
         '/api': { target, changeOrigin: true },
         '/health': { target, changeOrigin: true },

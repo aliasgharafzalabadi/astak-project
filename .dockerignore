@@ -1,9 +1,9 @@
 node_modules
 frontend
 coverage
-tests
 .git
+.claude
 .env
 *.log
 Dockerfile
-docker-compose.yml
+docker-compose*.yml

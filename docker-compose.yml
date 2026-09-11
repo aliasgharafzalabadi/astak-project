@@ -1,5 +1,6 @@
 x-app-build: &app-build
   context: .
+  target: production
   args:
     NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
 
@@ -124,6 +125,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      target: production
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
     ports:
