@@ -4,7 +4,9 @@ const { createTokenService } = require('./lib/token');
 const { createUserRepository } = require('./repositories/user.repository');
 const { createWalletRepository } = require('./repositories/wallet.repository');
 const { createAuthService } = require('./services/auth.service');
+const { createWalletService } = require('./services/wallet.service');
 const { createAuthController } = require('./controllers/auth.controller');
+const { createWalletController } = require('./controllers/wallet.controller');
 
 function createContainer({
   pool,
@@ -22,6 +24,7 @@ function createContainer({
     tokenService,
     initialBalance: config.wallet.initialBalance,
   });
+  const walletService = createWalletService({ walletRepository });
 
   return {
     config,
@@ -30,6 +33,7 @@ function createContainer({
     redis,
     tokenService,
     authController: createAuthController({ authService }),
+    walletController: createWalletController({ walletService }),
   };
 }
 
