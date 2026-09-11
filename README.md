@@ -76,6 +76,7 @@ socket.on('transfer:received', (n) => console.log(`${n.amount} Toman from ${n.se
 |---|---|---|---|
 | POST | `/api/auth/register` | public | Register; creates a wallet with the initial balance |
 | POST | `/api/auth/login` | public | Returns a JWT |
+| GET | `/api/users/:username` | user | Look up a recipient (`id`, `username`, `fullName`) |
 | GET | `/api/wallets/me` | user | Current balance |
 | GET | `/api/wallets/me/ledger` | user | Ledger entries of the current wallet |
 | POST | `/api/transfers` | user | Transfer `{ toUserId, amount, description? }`; the sender is always taken from the JWT |

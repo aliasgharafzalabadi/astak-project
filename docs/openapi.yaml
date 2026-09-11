@@ -25,6 +25,7 @@ servers:
   - url: http://localhost:3000
 tags:
   - name: Auth
+  - name: Users
   - name: Wallet
   - name: Transfers
   - name: Transactions
@@ -226,6 +227,29 @@ paths:
                   user: { $ref: '#/components/schemas/User' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/users/{username}:
+    get:
+      tags: [Users]
+      summary: Look up a transfer recipient by username
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string, example: sara }
+      responses:
+        '200':
+          description: Public profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, example: 3 }
+                  username: { type: string, example: sara }
+                  fullName: { type: string, example: Sara Rezaei }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/wallets/me:
     get:
       tags: [Wallet]

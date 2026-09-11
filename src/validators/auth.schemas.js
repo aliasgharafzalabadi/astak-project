@@ -17,4 +17,4 @@ const loginBody = z.object({
   password: z.string().min(1).max(72),
 });
 
-module.exports = { registerBody, loginBody };
+module.exports = { username, registerBody, loginBody };

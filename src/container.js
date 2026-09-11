@@ -8,10 +8,12 @@ const { createAuthService } = require('./services/auth.service');
 const { createWalletService } = require('./services/wallet.service');
 const { createTransferService } = require('./services/transfer.service');
 const { createTransactionService } = require('./services/transaction.service');
+const { createUserService } = require('./services/user.service');
 const { createAuthController } = require('./controllers/auth.controller');
 const { createWalletController } = require('./controllers/wallet.controller');
 const { createTransferController } = require('./controllers/transfer.controller');
 const { createTransactionController } = require('./controllers/transaction.controller');
+const { createUserController } = require('./controllers/user.controller');
 const { noopNotifier } = require('./services/notification.service');
 
 function createContainer({
@@ -54,6 +56,7 @@ function createContainer({
     walletController: createWalletController({ walletService }),
     transferController: createTransferController({ transferService }),
     transactionController: createTransactionController({ transactionService }),
+    userController: createUserController({ userService: createUserService({ userRepository }) }),
   };
 }
 

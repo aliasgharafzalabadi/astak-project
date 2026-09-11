@@ -6,12 +6,14 @@ const { createTransferRouter } = require('./transfer.routes');
 const { createTransactionRouter } = require('./transaction.routes');
 const { createAdminRouter } = require('./admin.routes');
 const { createDocsRouter } = require('./docs.routes');
+const { createUserRouter } = require('./user.routes');
 
 function createRouter(container) {
   const router = Router();
   router.use(createDocsRouter());
   router.use('/health', createHealthRouter(container));
   router.use('/api/auth', createAuthRouter(container));
+  router.use('/api/users', createUserRouter(container));
   router.use('/api/wallets', createWalletRouter(container));
   router.use('/api/transfers', createTransferRouter(container));
   router.use('/api/transactions', createTransactionRouter(container));
