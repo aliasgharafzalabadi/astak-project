@@ -7,6 +7,7 @@ A money transfer API built with **pure Node.js / Express** and **raw PostgreSQL*
 - **Real-time notifications** use **Socket.io**: the recipient gets the amount and the sender's name.
 - **Receipts**: transfers above 5,000,000 Toman enqueue a **BullMQ** job. A **separate worker** builds a text receipt, uploads it to **MinIO**, and stores the download link on the transaction.
 - **Tooling:** Swagger docs, Jest unit and integration tests (including concurrency tests), and the whole stack runs with Docker Compose.
+- **Frontend:** a Vue 3 web client (`frontend/`) for trying every flow in a browser.
 
 ---
 
@@ -18,6 +19,7 @@ docker-compose up --build
 
 | Service | URL |
 |---|---|
+| Web app (Vue 3) | http://localhost:8080 |
 | API | http://localhost:3000 |
 | Swagger UI | http://localhost:3000/api-docs |
 | Health check | http://localhost:3000/health |
@@ -41,6 +43,21 @@ New users registered through `POST /api/auth/register` start with `INITIAL_WALLE
 > `NPM_REGISTRY=https://mirror-npm.runflare.com/ docker-compose up --build`.
 > If a host port is already taken, override it, e.g. `POSTGRES_HOST_PORT=5433` or `APP_HOST_PORT=3001`.
 > Docker Compose also reads these variables from a local `.env` file.
+
+### Development vs production
+
+Both environments share `docker-compose.yml`. Development adds `docker-compose.dev.yml` on top of it.
+
+| | Production (`npm run docker:prod`) | Development (`npm run docker:dev`) |
+|---|---|---|
+| Command | `docker-compose up --build` | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build` |
+| API image | `production` stage: prod dependencies only, runs as the non-root `node` user | `development` stage: all dependencies, `nodemon` reloads on source changes |
+| Source code | Baked into the image | `src/`, `db/`, `docs/`, `tests/` bind-mounted from the host |
+| Frontend | Built assets served by **nginx** on `:8080`, which proxies `/api` and `/socket.io` to the API | **Vite dev server** with HMR on `:5173` |
+| Debugging | — | Node inspector on `:9229` (API) and `:9230` (worker) |
+| Logging | `info` | `debug` |
+
+File watching uses polling (`nodemon --legacy-watch`, Vite `usePolling`), because file-change events are not forwarded from Windows and macOS hosts into bind mounts. In the dev stack, tests can run inside the container: `docker compose exec app npm run test:unit`.
 
 ---
 
@@ -105,6 +122,22 @@ Errors always use the same shape: `{ "error": { "code": "INSUFFICIENT_FUNDS", "m
             └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Frontend (`frontend/`)
+
+A Vue 3 client built with Vite, Vue Router, Pinia and socket.io-client:
+
+- **Login and registration**, with one-click demo accounts.
+- **Dashboard:**
+  - balance card
+  - transfer form: looks up the recipient by username, formats the amount, and warns before overdraft and when a receipt will be generated
+  - recent activity
+- **Transactions, ledger, and admin** pages (the admin page is shown to the ADMIN role only).
+- **Live notifications:** a `transfer:received` event shows a toast and refreshes the balance and lists. The header shows the socket status.
+- **Receipts:** while a receipt is `PENDING`, the lists refresh every 2 seconds until the download link appears.
+- **Session handling:** an expired or invalid token (over HTTP or the socket) signs the user out.
+
+To run it locally against a running API: `cd frontend && npm install && npm run dev`, then open http://localhost:5173. Vite proxies `/api` and `/socket.io` to `VITE_API_TARGET` (default `http://localhost:3000`).
+
 ### Project layout
 
 ```
@@ -127,6 +160,9 @@ src/
   worker.js              Worker entry point
 tests/unit               Services, middlewares, worker, error mapping (no I/O)
 tests/integration        Real PostgreSQL + Supertest + socket.io-client
+frontend/                Vue 3 client (views, components, Pinia stores, API client, nginx config)
+docker-compose.yml       Production stack
+docker-compose.dev.yml   Development overrides (hot reload, debugger, Vite dev server)
 ```
 
 The layers use factory functions and constructor-style dependency injection, e.g. `createTransferService({ transactionRepository, receiptQueue, notifier })`. This keeps every layer testable without module mocking, and `container.js` is the single place where the real implementations are wired together.
