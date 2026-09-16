@@ -1,3 +1,5 @@
+require('dotenv').config({ quiet: true });
+
 Object.assign(process.env, {
   NODE_ENV: 'test',
   DATABASE_URL: process.env.TEST_DATABASE_URL || 'postgres://wallet:wallet@localhost:5432/wallet_test',

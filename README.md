@@ -284,11 +284,17 @@ wallets.balance == last balance_after for the wallet == sum(CREDIT + OPENING) - 
 
 ```bash
 npm install
-npm run test:unit                          # no infrastructure needed
+npm run test:unit                    # no infrastructure needed
 
-docker-compose up -d postgres              # creates the wallet_test database on first start
-npm run test:integration                   # TEST_DATABASE_URL overrides the default connection
+docker-compose up -d postgres        # creates the wallet_test database on first start
+npm run test:integration             # real PostgreSQL
+
+npm test                             # both suites
 ```
+
+The integration tests connect to `TEST_DATABASE_URL`, which is read from `.env` and defaults to
+`postgres://wallet:wallet@localhost:5432/wallet_test`. Set it if you mapped PostgreSQL to another
+host port (for example `POSTGRES_HOST_PORT=5433`).
 
 - **Unit tests:**
   - JWT and role middlewares
